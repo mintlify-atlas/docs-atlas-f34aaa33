@@ -1,0 +1,175 @@
+---
+title: Screenshots
+description: Generate high-quality page images from PDFs for use with LLM agents, visual inspection, or multimodal pipelines.
+---
+
+LiteParse can render any page of a PDF to a PNG or JPG image. Screenshots capture visual information that text extraction alone cannot represent — charts, diagrams, tables with complex layouts, handwritten annotations, and decorative elements.
+
+## Why screenshots matter for LLM agents
+
+LLM agents working with documents often need both structured text and visual context. A parsed page gives the model clean, indexable text. A screenshot gives it spatial layout, visual hierarchy, and graphical content. Combining the two lets agents answer questions about charts, fill forms, verify signatures, or describe figures — tasks that text-only parsing cannot support.
+
+## CLI usage
+
+### Basic screenshot
+
+```bash
+# Screenshot all pages, output to ./screenshots/
+lit screenshot document.pdf -o ./screenshots
+```
+
+### All options
+
+```
+Usage: lit screenshot [options] <file>
+
+Options:
+  -o, --output-dir <dir>  Output directory for screenshots (default: "./screenshots")
+  --target-pages <pages>  Page numbers to screenshot (e.g., "1,3,5" or "1-5")
+  --dpi <dpi>             DPI for rendering (default: "150")
+  --format <format>       Image format: png|jpg (default: "png")
+  --password <password>   Password for encrypted/protected documents
+  --config <file>         Config file (JSON)
+  -q, --quiet             Suppress progress output
+```
+
+### Examples
+
+```bash
+# Screenshot specific pages
+lit screenshot document.pdf --target-pages "1,3,5" -o ./screenshots
+
+# Screenshot a page range
+lit screenshot document.pdf --target-pages "1-10" -o ./screenshots
+
+# High-resolution screenshots
+lit screenshot document.pdf --dpi 300 -o ./screenshots
+
+# JPG output
+lit screenshot document.pdf --format jpg -o ./screenshots
+
+# First page only, 200 DPI
+lit screenshot document.pdf --target-pages "1" --dpi 200 -o ./screenshots
+```
+
+## Page range syntax
+
+The `--target-pages` flag accepts a comma-separated string of individual page numbers and ranges:
+
+| Syntax | Meaning |
+|---|---|
+| `"1"` | Page 1 only |
+| `"1,3,5"` | Pages 1, 3, and 5 |
+| `"1-5"` | Pages 1 through 5 |
+| `"1-5,10"` | Pages 1 through 5 and page 10 |
+| `"1-5,10,15-20"` | Pages 1–5, page 10, and pages 15–20 |
+
+Page numbers are 1-indexed. Invalid page numbers (out of range) are skipped with a warning.
+
+## Library usage
+
+### Basic screenshot
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+
+const parser = new LiteParse();
+
+// Screenshot all pages
+const screenshots = await parser.screenshot('document.pdf');
+
+for (const shot of screenshots) {
+  console.log(`Page ${shot.pageNum}: ${shot.width}x${shot.height}px`);
+  // shot.imageBuffer is a Node.js Buffer (PNG by default)
+}
+```
+
+### Screenshot specific pages
+
+Pass an array of 1-indexed page numbers as the second argument:
+
+```typescript
+import { LiteParse, ScreenshotResult } from '@llamaindex/liteparse';
+
+const parser = new LiteParse({ dpi: 200 });
+
+// Pages 1, 3, and 5
+const screenshots: ScreenshotResult[] = await parser.screenshot('document.pdf', [1, 3, 5]);
+```
+
+### Buffer input
+
+Screenshots work with `Buffer` and `Uint8Array` input, which is useful when you have already fetched document bytes:
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+import { readFile } from 'fs/promises';
+
+const parser = new LiteParse();
+const pdfBytes = await readFile('document.pdf');
+
+const screenshots = await parser.screenshot(pdfBytes, [1, 2, 3]);
+```
+
+### Saving screenshots to disk
+
+The library returns raw image buffers. Write them to disk with standard Node.js file APIs:
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+import { writeFile, mkdir } from 'fs/promises';
+
+const parser = new LiteParse({ dpi: 150 });
+const screenshots = await parser.screenshot('document.pdf');
+
+await mkdir('./screenshots', { recursive: true });
+
+for (const shot of screenshots) {
+  const filename = `./screenshots/page-${shot.pageNum}.png`;
+  await writeFile(filename, shot.imageBuffer);
+  console.log(`Saved ${filename}`);
+}
+```
+
+## ScreenshotResult type
+
+Each element in the returned array is a `ScreenshotResult`:
+
+```typescript
+interface ScreenshotResult {
+  /** 1-indexed page number. */
+  pageNum: number;
+  /** Image width in pixels. */
+  width: number;
+  /** Image height in pixels. */
+  height: number;
+  /** Raw image data as a Node.js Buffer (PNG or JPG). */
+  imageBuffer: Buffer;
+  /** File path if the screenshot was saved to disk. */
+  imagePath?: string;
+}
+```
+
+## Output format: PNG vs JPG
+
+| Format | Characteristics |
+|---|---|
+| `png` (default) | Lossless, larger files, preserves sharp text and fine lines |
+| `jpg` | Lossy compression, smaller files, may introduce artifacts near text |
+
+For use with LLM vision APIs, PNG is generally preferred when file size allows. JPG is appropriate when you need to minimize payload size and the content is mostly photographic.
+
+## DPI tradeoffs
+
+The `dpi` setting controls image resolution for both screenshots and OCR rendering:
+
+| DPI | Result |
+|---|---|
+| `72` | Screen resolution, very fast, text may be blurry |
+| `150` | Default, sharp enough for most documents and LLM inputs |
+| `200`–`250` | Better for small fonts or fine detail |
+| `300` | Print quality, noticeably slower and larger files |
+
+<Tip>
+For LLM vision models, 150 DPI usually provides sufficient detail while keeping image sizes manageable. Increase to 200–300 DPI only if the model struggles with small text or dense layouts.
+</Tip>

@@ -1,0 +1,449 @@
+---
+title: Types
+description: Complete TypeScript type and interface reference for all public exports from @llamaindex/liteparse.
+---
+
+All types documented here are exported from `@llamaindex/liteparse` and can be imported directly:
+
+```typescript
+import type {
+  LiteParseConfig,
+  LiteParseInput,
+  OutputFormat,
+  ParseResult,
+  ParseResultJson,
+  ParsedPage,
+  TextItem,
+  JsonTextItem,
+  MarkupData,
+  BoundingBox,
+  ScreenshotResult,
+  SearchItemsOptions,
+} from "@llamaindex/liteparse";
+```
+
+---
+
+## Primitive Types
+
+### `OutputFormat`
+
+```typescript
+type OutputFormat = "json" | "text";
+```
+
+| Value | Description |
+|-------|-------------|
+| `"json"` | Structured JSON with per-page text items, bounding boxes, and metadata. Populates `ParseResult.json`. |
+| `"text"` | Plain text with spatial layout preserved. |
+
+---
+
+### `LiteParseInput`
+
+```typescript
+type LiteParseInput = string | Buffer | Uint8Array;
+```
+
+Accepted input types for [`LiteParse.parse()`](/api/liteparse-class#parse) and [`LiteParse.screenshot()`](/api/liteparse-class#screenshot).
+
+| Type | Behaviour |
+|------|-----------|
+| `string` | File path to a document on disk. |
+| `Buffer` | Raw file bytes. PDF bytes are parsed directly with zero disk I/O; non-PDF bytes are written to a temp file for format conversion. |
+| `Uint8Array` | Same behaviour as `Buffer`. |
+
+---
+
+## Configuration
+
+### `LiteParseConfig`
+
+Configuration options for the `LiteParse` parser. Pass a `Partial<LiteParseConfig>` to the constructor to override only the options you need.
+
+```typescript
+const parser = new LiteParse({
+  ocrEnabled: true,
+  ocrLanguage: "fra",
+  dpi: 300,
+  outputFormat: "json",
+});
+```
+
+<ParamField path="ocrLanguage" type="string | string[]" default='"en"'>
+  OCR language code(s). Uses ISO 639-3 codes for Tesseract (e.g., `"eng"`, `"fra"`) or ISO 639-1 for HTTP OCR servers (e.g., `"en"`, `"fr"`).
+</ParamField>
+
+<ParamField path="ocrEnabled" type="boolean" default="true">
+  Whether to run OCR on pages with little or no native text. When enabled, LiteParse selectively OCRs only images and text-sparse regions.
+</ParamField>
+
+<ParamField path="ocrServerUrl" type="string" optional>
+  URL of an HTTP OCR server implementing the [LiteParse OCR API](/api/ocr-api-spec). If not provided, the built-in Tesseract.js engine is used.
+</ParamField>
+
+<ParamField path="tessdataPath" type="string" optional>
+  Path to a directory containing Tesseract `.traineddata` files. Used as both the language data source and cache directory for Tesseract.js.
+
+  If not set, falls back to the `TESSDATA_PREFIX` environment variable. If neither is set, Tesseract.js downloads data from `cdn.jsdelivr.net`.
+
+  Example: `/opt/tessdata`
+</ParamField>
+
+<ParamField path="numWorkers" type="number" default="4">
+  Number of pages to OCR in parallel. Higher values use more memory but process faster on multi-core machines. The library defaults to `4`; the CLI computes `CPU cores - 1` (minimum 1) at runtime.
+</ParamField>
+
+<ParamField path="maxPages" type="number" default="1000">
+  Maximum number of pages to parse from the document.
+</ParamField>
+
+<ParamField path="targetPages" type="string" optional>
+  Specific pages to parse, as a comma-separated string of page numbers and ranges. Example: `"1-5,10,15-20"`.
+</ParamField>
+
+<ParamField path="dpi" type="number" default="150">
+  DPI (dots per inch) for rendering pages to images. Higher values improve OCR accuracy but increase processing time and memory usage. Also controls the resolution of `screenshot()` output.
+</ParamField>
+
+<ParamField path="outputFormat" type="OutputFormat" default='"json"'>
+  Output format for parsed results.
+</ParamField>
+
+<ParamField path="preciseBoundingBox" type="boolean" default="true">
+  <Warning>
+    **Deprecated.** Controls the deprecated `boundingBoxes` output field only. Will be removed in v2.0. `TextItem` coordinates (`x`, `y`, `width`, `height`) are always present regardless of this setting.
+  </Warning>
+  Calculate precise bounding boxes for each text line. Disable for faster parsing when bounding boxes are not needed.
+</ParamField>
+
+<ParamField path="preserveVerySmallText" type="boolean" default="false">
+  Preserve very small text that would normally be filtered out during post-processing.
+</ParamField>
+
+<ParamField path="preserveLayoutAlignmentAcrossPages" type="boolean" default="false">
+  Maintain consistent text alignment across page boundaries.
+</ParamField>
+
+<ParamField path="password" type="string" optional>
+  Password for opening encrypted or protected documents (PDFs and office documents).
+</ParamField>
+
+---
+
+## Parse Results
+
+### `ParseResult`
+
+The value returned by [`LiteParse.parse()`](/api/liteparse-class#parse).
+
+<ResponseField name="pages" type="ParsedPage[]">
+  Per-page parsed data. Each entry contains the page dimensions, full text, and all individual text items with spatial coordinates.
+</ResponseField>
+
+<ResponseField name="text" type="string">
+  Full document text, concatenated from all pages with spatial layout preserved.
+</ResponseField>
+
+<ResponseField name="json" type="ParseResultJson | undefined">
+  Structured JSON data. Present only when `outputFormat` is `"json"`.
+</ResponseField>
+
+---
+
+### `ParsedPage`
+
+Parsed data for a single page of a document.
+
+<ResponseField name="pageNum" type="number">
+  1-indexed page number.
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Page width in PDF points (1 point = 1/72 inch).
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Page height in PDF points.
+</ResponseField>
+
+<ResponseField name="text" type="string">
+  Full text content of the page with spatial layout preserved.
+</ResponseField>
+
+<ResponseField name="textItems" type="TextItem[]">
+  Individual text elements extracted from the page, each with position, size, and font metadata.
+</ResponseField>
+
+<ResponseField name="boundingBoxes" type="BoundingBox[] | undefined">
+  <Warning>
+    **Deprecated.** Use `TextItem` coordinates (`x`, `y`, `width`, `height`) instead. Will be removed in v2.0. Present only when `LiteParseConfig.preciseBoundingBox` is enabled.
+  </Warning>
+</ResponseField>
+
+---
+
+### `TextItem`
+
+An individual text element extracted from a page, with position, size, and font metadata.
+
+<Note>
+  Coordinates use the PDF coordinate system: origin at the **top-left** of the page, x increases to the right, y increases downward. Units are PDF points (1 pt = 1/72 inch).
+</Note>
+
+<ResponseField name="str" type="string">
+  The text content of this item.
+</ResponseField>
+
+<ResponseField name="x" type="number">
+  X coordinate of the top-left corner, in PDF points.
+</ResponseField>
+
+<ResponseField name="y" type="number">
+  Y coordinate of the top-left corner, in PDF points.
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Width of the text item in PDF points.
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Height of the text item in PDF points.
+</ResponseField>
+
+<ResponseField name="w" type="number">
+  Alias for `width`.
+</ResponseField>
+
+<ResponseField name="h" type="number">
+  Alias for `height`.
+</ResponseField>
+
+<ResponseField name="fontName" type="string | undefined">
+  Font name (e.g., `"Helvetica"`, `"Times-Roman"`). OCR-detected text uses `"OCR"`.
+</ResponseField>
+
+<ResponseField name="fontSize" type="number | undefined">
+  Font size in PDF points.
+</ResponseField>
+
+<ResponseField name="r" type="number | undefined">
+  Rotation angle in degrees. One of `0`, `90`, `180`, or `270`.
+</ResponseField>
+
+<ResponseField name="markup" type="MarkupData | undefined">
+  Markup annotations (highlights, underlines, etc.) applied to this text item.
+  <Expandable title="MarkupData properties">
+    <ResponseField name="highlight" type="string | undefined">
+      Highlight color (e.g., `"yellow"`, `"#FFFF00"`), or `undefined` if not highlighted.
+    </ResponseField>
+    <ResponseField name="underline" type="boolean | undefined">
+      Whether the text is underlined.
+    </ResponseField>
+    <ResponseField name="squiggly" type="boolean | undefined">
+      Whether the text has a squiggly underline.
+    </ResponseField>
+    <ResponseField name="strikeout" type="boolean | undefined">
+      Whether the text is struck out.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### `MarkupData`
+
+Markup annotation data associated with a `TextItem`.
+
+<ResponseField name="highlight" type="string | undefined">
+  Highlight color (e.g., `"yellow"`, `"#FFFF00"`), or `undefined` if not highlighted.
+</ResponseField>
+
+<ResponseField name="underline" type="boolean | undefined">
+  Whether the text is underlined.
+</ResponseField>
+
+<ResponseField name="squiggly" type="boolean | undefined">
+  Whether the text has a squiggly underline.
+</ResponseField>
+
+<ResponseField name="strikeout" type="boolean | undefined">
+  Whether the text is struck out.
+</ResponseField>
+
+---
+
+### `ParseResultJson`
+
+Structured JSON representation of parsed document data. Returned inside `ParseResult.json` when `outputFormat` is `"json"`.
+
+<ResponseField name="pages" type="array">
+  Array of per-page data objects.
+  <Expandable title="Page object properties">
+    <ResponseField name="page" type="number">
+      1-indexed page number.
+    </ResponseField>
+    <ResponseField name="width" type="number">
+      Page width in PDF points.
+    </ResponseField>
+    <ResponseField name="height" type="number">
+      Page height in PDF points.
+    </ResponseField>
+    <ResponseField name="text" type="string">
+      Full text content of the page.
+    </ResponseField>
+    <ResponseField name="textItems" type="JsonTextItem[]">
+      Individual text elements with position and font metadata.
+    </ResponseField>
+    <ResponseField name="boundingBoxes" type="BoundingBox[]">
+      <Warning>
+        **Deprecated.** Use `textItems` coordinates instead. Will be removed in v2.0.
+      </Warning>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### `JsonTextItem`
+
+A text element from the JSON output. Similar to `TextItem` but uses `text` instead of `str` and omits the `w`/`h` aliases and internal fields.
+
+<ResponseField name="text" type="string">
+  The text content of this item.
+</ResponseField>
+
+<ResponseField name="x" type="number">
+  X coordinate of the top-left corner, in PDF points.
+</ResponseField>
+
+<ResponseField name="y" type="number">
+  Y coordinate of the top-left corner, in PDF points.
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Width of the text item in PDF points.
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Height of the text item in PDF points.
+</ResponseField>
+
+<ResponseField name="fontName" type="string | undefined">
+  Font name.
+</ResponseField>
+
+<ResponseField name="fontSize" type="number | undefined">
+  Font size in PDF points.
+</ResponseField>
+
+---
+
+## Screenshots
+
+### `ScreenshotResult`
+
+The result of generating a screenshot with [`LiteParse.screenshot()`](/api/liteparse-class#screenshot).
+
+<ResponseField name="pageNum" type="number">
+  1-indexed page number.
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Image width in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Image height in pixels.
+</ResponseField>
+
+<ResponseField name="imageBuffer" type="Buffer">
+  Raw image data as a Node.js `Buffer` (PNG format).
+</ResponseField>
+
+<ResponseField name="imagePath" type="string | undefined">
+  File path if the screenshot was saved to disk.
+</ResponseField>
+
+---
+
+## Search
+
+### `SearchItemsOptions`
+
+Options for the [`searchItems()`](#searchitems) function.
+
+<ParamField path="phrase" type="string" required>
+  The text to search for. Matches can span multiple adjacent `TextItem` / `JsonTextItem` entries.
+</ParamField>
+
+<ParamField path="caseSensitive" type="boolean" default="false">
+  Whether the search should be case-sensitive.
+</ParamField>
+
+---
+
+### `searchItems()`
+
+Search an array of text items for all occurrences of a phrase, returning a merged `JsonTextItem` per match with a combined bounding box.
+
+```typescript
+function searchItems(
+  items: JsonTextItem[],
+  options: SearchItemsOptions
+): JsonTextItem[]
+```
+
+For phrases that span multiple adjacent items, the result is a single merged item whose bounding box encloses all matched items. Font metadata is taken from the first matched item.
+
+<ParamField path="items" type="JsonTextItem[]" required>
+  The array of text items to search. Typically `result.json.pages[n].textItems`.
+</ParamField>
+
+<ParamField path="options" type="SearchItemsOptions" required>
+  Search options including the phrase and case-sensitivity flag.
+</ParamField>
+
+**Returns** `JsonTextItem[]` — one entry per match, with `text` set to `options.phrase` and bounding box coordinates covering all matched items.
+
+```typescript
+import { LiteParse, searchItems } from "@llamaindex/liteparse";
+
+const parser = new LiteParse({ outputFormat: "json" });
+const result = await parser.parse("report.pdf");
+
+for (const page of result.json.pages) {
+  const matches = searchItems(page.textItems, { phrase: "0°C to 70°C" });
+  for (const match of matches) {
+    console.log(`Found "${match.text}" at (${match.x}, ${match.y})`);
+  }
+}
+```
+
+---
+
+## Deprecated Types
+
+### `BoundingBox`
+
+<Warning>
+  **Deprecated.** Use `TextItem` coordinates (`x`, `y`, `width`, `height`) instead. `BoundingBox` will be removed in v2.0.
+</Warning>
+
+An axis-aligned bounding box defined by its top-left and bottom-right corners. All coordinates are in PDF points.
+
+<ResponseField name="x1" type="number">
+  X coordinate of the top-left corner.
+</ResponseField>
+
+<ResponseField name="y1" type="number">
+  Y coordinate of the top-left corner.
+</ResponseField>
+
+<ResponseField name="x2" type="number">
+  X coordinate of the bottom-right corner.
+</ResponseField>
+
+<ResponseField name="y2" type="number">
+  Y coordinate of the bottom-right corner.
+</ResponseField>

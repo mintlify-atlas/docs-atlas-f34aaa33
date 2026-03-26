@@ -1,0 +1,226 @@
+---
+title: OCR API Specification
+description: HTTP API specification that OCR servers must implement to work as a pluggable OCR backend for LiteParse.
+---
+
+## Overview
+
+LiteParse's OCR system is designed around a simple, pluggable HTTP interface. The built-in engine uses [Tesseract.js](https://tesseract.projectnaptha.com/) with zero configuration, but you can replace it with any OCR backend — EasyOCR, PaddleOCR, a cloud API, or your own model — as long as it exposes the single endpoint described here.
+
+This separation means:
+- OCR runs in a separate process (better memory isolation)
+- You can swap OCR engines without changing your parsing code
+- GPU-accelerated servers can be used without any Node.js native bindings
+- The same server can serve multiple LiteParse instances
+
+To use an external OCR server, set `ocrServerUrl` in your config:
+
+```typescript
+const parser = new LiteParse({
+  ocrServerUrl: "http://localhost:8828/ocr",
+  ocrLanguage: "en",
+});
+```
+
+See [OCR Servers](/api/ocr-servers) for ready-to-run EasyOCR and PaddleOCR implementations.
+
+---
+
+## Endpoint
+
+```
+POST /ocr
+```
+
+---
+
+## Request
+
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="binary" required>
+  The image to OCR. LiteParse sends PNG images rendered at the configured `dpi`. At minimum, your server must accept PNG and JPG. Optionally: TIFF, WebP, BMP, GIF.
+</ParamField>
+
+<ParamField body="language" type="string" default='"en"'>
+  ISO 639-1 two-letter language code. Your server is responsible for mapping this to whatever format your underlying OCR engine expects. See the [language codes table](#language-codes) below.
+</ParamField>
+
+### Language codes
+
+| Code | Language | Notes |
+|------|----------|---------|
+| `en` | English | |
+| `zh` | Chinese (Simplified) | |
+| `zh-tw` | Chinese (Traditional) | |
+| `ja` | Japanese | |
+| `ko` | Korean | |
+| `fr` | French | |
+| `de` | German | |
+| `es` | Spanish | |
+| `pt` | Portuguese | |
+| `ru` | Russian | |
+| `ar` | Arabic | |
+| `hi` | Hindi | |
+
+<Note>
+  LiteParse passes the code from `ocrLanguage` verbatim. Your server should normalise it to whatever your OCR engine expects. For example, the [PaddleOCR server](/api/ocr-servers#paddleocr) maps `"zh"` → `"ch"` and `"ja"` → `"japan"` internally.
+</Note>
+
+---
+
+## Response
+
+**Content-Type:** `application/json`
+**Status:** `200 OK`
+
+```json
+{
+  "results": [
+    {
+      "text": "recognized text",
+      "bbox": [10, 20, 60, 40],
+      "confidence": 0.98
+    },
+    {
+      "text": "more text",
+      "bbox": [70, 20, 130, 40],
+      "confidence": 0.97
+    }
+  ]
+}
+```
+
+<ResponseField name="results" type="array">
+  Array of text detection results. Return an empty array (`[]`) if no text is detected — do not omit the field.
+  <Expandable title="Result object properties">
+    <ResponseField name="text" type="string">
+      The recognized text content for this detection.
+    </ResponseField>
+    <ResponseField name="bbox" type="[number, number, number, number]">
+      Axis-aligned bounding box as `[x1, y1, x2, y2]` in pixel coordinates, where `(x1, y1)` is the top-left corner and `(x2, y2)` is the bottom-right corner.
+    </ResponseField>
+    <ResponseField name="confidence" type="number">
+      Confidence score between `0.0` (no confidence) and `1.0` (full confidence). LiteParse filters out results below `0.1` confidence internally.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Error responses
+
+<ResponseField name="error" type="string">
+  Human-readable description of what went wrong.
+</ResponseField>
+
+| Status | Meaning | When to use |
+|--------|---------|-------------|
+| `400 Bad Request` | Invalid request | Missing `file` field, unsupported image format, unsupported language code |
+| `500 Internal Server Error` | Processing failure | OCR engine crashed or returned an unexpected result |
+
+```json
+{
+  "error": "Unsupported language: xyz"
+}
+```
+
+---
+
+## Implementation notes
+
+### Coordinate system
+
+- Origin `(0, 0)` is at the **top-left** of the image
+- X increases to the right
+- Y increases downward
+- All coordinates are in **pixels** at the DPI of the submitted image
+
+### Bounding box normalisation
+
+Always return axis-aligned bounding boxes as `[x1, y1, x2, y2]` with `x2 > x1` and `y2 > y1`. If your OCR engine returns rotated quadrilateral boxes or polygon coordinates, convert them to axis-aligned boxes by taking the min/max of all coordinates:
+
+```python
+def polygon_to_bbox(polygon):
+    """Convert polygon [[x1,y1], [x2,y2], ...] to [x1, y1, x2, y2]"""
+    xs = [point[0] for point in polygon]
+    ys = [point[1] for point in polygon]
+    return [min(xs), min(ys), max(xs), max(ys)]
+```
+
+### Confidence scoring
+
+- Normalise all confidence scores to the `0.0`–`1.0` range.
+- If your engine does not provide confidence scores, return `1.0` for every result.
+- LiteParse will apply its own downstream filtering (results below `0.1` are discarded).
+
+### Text ordering
+
+Return results in natural reading order (top-to-bottom, left-to-right for most languages). LiteParse uses spatial coordinates for layout reconstruction, but correct ordering helps performance.
+
+### Performance
+
+- Target under **10 seconds** per image response time.
+- Support **concurrent requests** — LiteParse sends pages in parallel up to `numWorkers` concurrency.
+- **Cache OCR models in memory** between requests; do not reload the model on every request.
+- Consider **GPU acceleration** for high-volume workloads.
+
+---
+
+## Example
+
+### Request
+
+```bash
+curl -X POST http://localhost:8080/ocr \
+  -F "file=@document.png" \
+  -F "language=en"
+```
+
+### Response
+
+```json
+{
+  "results": [
+    {
+      "text": "Hello",
+      "bbox": [10, 20, 60, 40],
+      "confidence": 0.98
+    },
+    {
+      "text": "World",
+      "bbox": [70, 20, 130, 40],
+      "confidence": 0.97
+    }
+  ]
+}
+```
+
+---
+
+## Compliance checklist
+
+Before pointing LiteParse at your server, verify the following:
+
+- [ ] Accepts `POST /ocr` endpoint
+- [ ] Accepts `file` (binary) and `language` (string) form fields
+- [ ] Returns JSON with a `results` array
+- [ ] Each result has `text` (string), `bbox` ([x1, y1, x2, y2]), and `confidence` (number)
+- [ ] Bounding boxes use pixel coordinates with top-left origin
+- [ ] Confidence values are normalised to the `0.0`–`1.0` range
+- [ ] Returns `200` on success
+- [ ] Returns `400` / `500` with an `{ "error": "..." }` body on failure
+- [ ] Handles PNG and JPG input at minimum
+- [ ] Responds within 10 seconds per image
+
+---
+
+## Optional: health endpoint
+
+Implementing `GET /health` is optional but recommended for monitoring and orchestration:
+
+```json
+{ "status": "healthy" }
+```
+
+Both the [EasyOCR](/api/ocr-servers#easyocr) and [PaddleOCR](/api/ocr-servers#paddleocr) reference servers implement this endpoint.

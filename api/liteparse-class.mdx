@@ -1,0 +1,293 @@
+---
+title: LiteParse
+description: API reference for the LiteParse class — the main entry point for parsing documents, extracting text, and generating page screenshots.
+---
+
+The `LiteParse` class is the primary interface for all document parsing and screenshot operations. Construct one instance per configuration and reuse it across multiple calls.
+
+```typescript
+import { LiteParse } from "@llamaindex/liteparse";
+```
+
+## Constructor
+
+### `new LiteParse(userConfig?)`
+
+Create a new parser instance. All configuration fields have sensible defaults — pass only the options you want to override.
+
+```typescript
+constructor(userConfig: Partial<LiteParseConfig> = {})
+```
+
+**Engine initialization:** The constructor eagerly initialises the PDF engine (PDF.js) and the OCR engine. If `ocrEnabled` is `true` and `ocrServerUrl` is set, an HTTP OCR engine is used; otherwise Tesseract.js is loaded in-process.
+
+<ParamField path="userConfig" type="Partial<LiteParseConfig>" optional>
+  Partial configuration object. Any fields you omit will use their defaults. See the [Configuration reference](#configuration-reference) below and the full [LiteParseConfig](/api/types#liteparseconfig) type.
+</ParamField>
+
+### Configuration reference
+
+<ParamField path="ocrEnabled" type="boolean" default="true">
+  Whether to run OCR on pages with little or no native text. When enabled, LiteParse selectively OCRs only images and text-sparse regions.
+</ParamField>
+
+<ParamField path="ocrLanguage" type="string | string[]" default='"en"'>
+  OCR language code(s). Uses ISO 639-3 codes for Tesseract (e.g., `"eng"`, `"fra"`) or ISO 639-1 for HTTP OCR servers (e.g., `"en"`, `"fr"`).
+</ParamField>
+
+<ParamField path="ocrServerUrl" type="string" optional>
+  URL of an HTTP OCR server implementing the [LiteParse OCR API](/api/ocr-api-spec). When provided, the built-in Tesseract.js engine is bypassed entirely.
+</ParamField>
+
+<ParamField path="tessdataPath" type="string" optional>
+  Path to a directory containing Tesseract `.traineddata` files, used as both the language data source and cache directory. Falls back to the `TESSDATA_PREFIX` environment variable, then downloads from `cdn.jsdelivr.net`.
+</ParamField>
+
+<ParamField path="numWorkers" type="number" default="4">
+  Number of pages to OCR in parallel. Higher values use more memory but process faster on multi-core machines. The CLI computes this dynamically (CPU cores - 1, minimum 1) but the library default is `4`.
+</ParamField>
+
+<ParamField path="maxPages" type="number" default="1000">
+  Maximum number of pages to parse from the document.
+</ParamField>
+
+<ParamField path="targetPages" type="string" optional>
+  Specific pages to parse, as a comma-separated string of page numbers and ranges. Example: `"1-5,10,15-20"`.
+</ParamField>
+
+<ParamField path="dpi" type="number" default="150">
+  DPI for rendering pages to images. Higher values improve OCR accuracy but increase processing time and memory usage. Also controls the resolution of `screenshot()` output.
+</ParamField>
+
+<ParamField path="outputFormat" type="OutputFormat" default='"json"'>
+  Output format for parsed results. `"json"` produces structured data with per-page text items; `"text"` produces plain text with spatial layout preserved.
+</ParamField>
+
+<ParamField path="preserveVerySmallText" type="boolean" default="false">
+  Preserve very small text that would normally be filtered out during post-processing.
+</ParamField>
+
+<ParamField path="preserveLayoutAlignmentAcrossPages" type="boolean" default="false">
+  Maintain consistent text alignment across page boundaries.
+</ParamField>
+
+<ParamField path="password" type="string" optional>
+  Password for opening encrypted or protected documents.
+</ParamField>
+
+<ParamField path="preciseBoundingBox" type="boolean" default="true">
+  <Warning>
+    **Deprecated.** Controls the deprecated `boundingBoxes` output field. Will be removed in v2.0. `TextItem` coordinates (`x`, `y`, `width`, `height`) are always present regardless of this setting.
+  </Warning>
+  Calculate precise bounding boxes for each text line.
+</ParamField>
+
+---
+
+## Methods
+
+### `parse(input, quiet?)`
+
+Parse a document and return the extracted text, per-page data, and optionally structured JSON.
+
+```typescript
+async parse(input: LiteParseInput, quiet?: boolean): Promise<ParseResult>
+```
+
+PDFs are parsed natively. Non-PDF formats (DOCX, XLSX, PPTX, images, etc.) are automatically converted to PDF before parsing when the required system tools are installed (LibreOffice, ImageMagick).
+
+For **Buffer / Uint8Array** input: PDF bytes are passed directly to the parser with zero disk I/O. Non-PDF bytes are written to a temp file for conversion.
+
+<ParamField path="input" type="LiteParseInput" required>
+  The document to parse. Accepts:
+  - `string` — An absolute or relative file path on disk.
+  - `Buffer` — Raw file bytes.
+  - `Uint8Array` — Raw file bytes.
+</ParamField>
+
+<ParamField path="quiet" type="boolean" default="false">
+  When `true`, suppresses progress messages written to `stderr`.
+</ParamField>
+
+**Returns** `Promise<ParseResult>`
+
+<Expandable title="ParseResult properties">
+  <ResponseField name="pages" type="ParsedPage[]">
+    Per-page parsed data including text content, dimensions, and individual text items with spatial coordinates.
+  </ResponseField>
+  <ResponseField name="text" type="string">
+    Full document text, concatenated from all pages with spatial layout preserved.
+  </ResponseField>
+  <ResponseField name="json" type="ParseResultJson | undefined">
+    Structured JSON data. Present only when `outputFormat` is `"json"`. Contains the same per-page data in a serialisable shape.
+  </ResponseField>
+</Expandable>
+
+**Throws** `Error` if the file cannot be found, converted, or parsed.
+
+#### Examples
+
+<CodeGroup>
+```typescript Basic text extraction
+import { LiteParse } from "@llamaindex/liteparse";
+
+const parser = new LiteParse();
+const result = await parser.parse("document.pdf");
+console.log(result.text);
+```
+
+```typescript JSON output with text items
+const parser = new LiteParse({ outputFormat: "json", dpi: 300 });
+const result = await parser.parse("document.pdf");
+
+for (const page of result.json.pages) {
+  console.log(`Page ${page.page}: ${page.textItems.length} text items`);
+  for (const item of page.textItems) {
+    console.log(`  "${item.text}" at (${item.x}, ${item.y})`);
+  }
+}
+```
+
+```typescript Parse from a Buffer
+import fs from "fs";
+
+const parser = new LiteParse({ ocrEnabled: true });
+const buffer = fs.readFileSync("scanned.pdf");
+const result = await parser.parse(buffer);
+console.log(result.text);
+```
+
+```typescript HTTP OCR server
+const parser = new LiteParse({
+  ocrServerUrl: "http://localhost:8828/ocr",
+  ocrLanguage: "en",
+});
+const result = await parser.parse("scanned-document.pdf");
+console.log(result.text);
+```
+
+```typescript Specific pages and language
+const parser = new LiteParse({
+  ocrEnabled: true,
+  ocrLanguage: "fra",
+  targetPages: "1-3,7",
+  dpi: 200,
+});
+const result = await parser.parse("rapport.pdf");
+console.log(`Parsed ${result.pages.length} pages`);
+```
+</CodeGroup>
+
+---
+
+### `screenshot(input, pageNumbers?, quiet?)`
+
+Render one or more pages of a PDF to image buffers using PDFium for high-quality output.
+
+```typescript
+async screenshot(
+  input: LiteParseInput,
+  pageNumbers?: number[],
+  quiet?: boolean
+): Promise<ScreenshotResult[]>
+```
+
+<Note>
+  `screenshot()` currently only supports PDF input. The `dpi` config option controls the rendering resolution.
+</Note>
+
+<ParamField path="input" type="LiteParseInput" required>
+  The PDF document to render. Accepts:
+  - `string` — A file path on disk.
+  - `Buffer` — Raw PDF bytes.
+  - `Uint8Array` — Raw PDF bytes.
+</ParamField>
+
+<ParamField path="pageNumbers" type="number[]" optional>
+  1-indexed page numbers to render. If omitted, all pages are rendered. Invalid page numbers are skipped with a warning to `stderr`.
+</ParamField>
+
+<ParamField path="quiet" type="boolean" default="false">
+  When `true`, suppresses progress messages written to `stderr`.
+</ParamField>
+
+**Returns** `Promise<ScreenshotResult[]>` — one entry per rendered page, in the order requested.
+
+<Expandable title="ScreenshotResult properties">
+  <ResponseField name="pageNum" type="number">
+    1-indexed page number of this screenshot.
+  </ResponseField>
+  <ResponseField name="width" type="number">
+    Rendered image width in pixels.
+  </ResponseField>
+  <ResponseField name="height" type="number">
+    Rendered image height in pixels.
+  </ResponseField>
+  <ResponseField name="imageBuffer" type="Buffer">
+    Raw image data as a Node.js `Buffer` (PNG format).
+  </ResponseField>
+  <ResponseField name="imagePath" type="string | undefined">
+    File path if the screenshot was saved to disk.
+  </ResponseField>
+</Expandable>
+
+#### Examples
+
+<CodeGroup>
+```typescript Screenshot all pages
+import { LiteParse } from "@llamaindex/liteparse";
+import fs from "fs";
+
+const parser = new LiteParse({ dpi: 300 });
+const screenshots = await parser.screenshot("document.pdf");
+
+for (const shot of screenshots) {
+  fs.writeFileSync(`page-${shot.pageNum}.png`, shot.imageBuffer);
+  console.log(`Page ${shot.pageNum}: ${shot.width}x${shot.height}px`);
+}
+```
+
+```typescript Screenshot specific pages
+const parser = new LiteParse({ dpi: 150 });
+// Render pages 1, 3, and 5
+const screenshots = await parser.screenshot("document.pdf", [1, 3, 5]);
+
+for (const shot of screenshots) {
+  console.log(`Page ${shot.pageNum} → ${shot.imageBuffer.byteLength} bytes`);
+}
+```
+
+```typescript Screenshot from a Buffer
+import fs from "fs";
+
+const parser = new LiteParse();
+const pdfBuffer = fs.readFileSync("document.pdf");
+const [firstPage] = await parser.screenshot(pdfBuffer, [1]);
+
+fs.writeFileSync("cover.png", firstPage.imageBuffer);
+```
+</CodeGroup>
+
+---
+
+### `getConfig()`
+
+Returns a shallow copy of the active configuration, including all defaults merged with user overrides.
+
+```typescript
+getConfig(): LiteParseConfig
+```
+
+```typescript
+const parser = new LiteParse({ dpi: 300 });
+console.log(parser.getConfig().dpi); // 300
+console.log(parser.getConfig().ocrEnabled); // true (default)
+```
+
+---
+
+## Related
+
+- [Types reference](/api/types) — Full documentation for `LiteParseConfig`, `ParseResult`, `TextItem`, and all other exported types.
+- [OCR API Spec](/api/ocr-api-spec) — HTTP API that external OCR servers must implement.
+- [OCR Servers](/api/ocr-servers) — How to run EasyOCR or PaddleOCR as an OCR backend.

@@ -1,0 +1,169 @@
+---
+title: OCR setup
+description: Configure optical character recognition for scanned PDFs and image-heavy documents, including offline environments and HTTP OCR servers.
+---
+
+LiteParse ships with Tesseract.js as a built-in OCR engine that requires zero configuration. For higher accuracy or GPU-accelerated results, you can swap it for any HTTP OCR server.
+
+## Default: Tesseract.js
+
+Tesseract.js runs in-process with no external dependencies. OCR is enabled by default whenever LiteParse detects a page that needs it.
+
+```bash
+# OCR is on by default — no flags needed
+lit parse scanned.pdf
+```
+
+To disable OCR entirely:
+
+```bash
+lit parse document.pdf --no-ocr
+```
+
+In the library:
+
+```typescript
+const parser = new LiteParse({ ocrEnabled: false });
+```
+
+## Specifying OCR language
+
+The language code format differs depending on which OCR engine you are using:
+
+| Engine | Standard | Example |
+|---|---|---|
+| Tesseract.js (default) | ISO 639-3 | `fra`, `deu`, `spa` |
+| HTTP OCR server | ISO 639-1 | `fr`, `de`, `es` |
+
+<Note>
+The config option and CLI flag both use the same field (`ocrLanguage` / `--ocr-language`). LiteParse passes the value directly to the active engine, so use the correct code format for your setup.
+</Note>
+
+<Tabs>
+  <Tab title="CLI">
+    ```bash
+    # Tesseract (ISO 639-3)
+    lit parse document.pdf --ocr-language fra
+
+    # HTTP OCR server (ISO 639-1)
+    lit parse document.pdf --ocr-server-url http://localhost:8828/ocr --ocr-language fr
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { LiteParse } from '@llamaindex/liteparse';
+
+    // Tesseract (ISO 639-3)
+    const parser = new LiteParse({ ocrLanguage: 'fra' });
+
+    // HTTP OCR server (ISO 639-1)
+    const parser = new LiteParse({
+      ocrServerUrl: 'http://localhost:8828/ocr',
+      ocrLanguage: 'fr',
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Offline and air-gapped environments
+
+By default, Tesseract.js downloads language model files (`.traineddata`) from `cdn.jsdelivr.net` on first use. In environments without internet access, pre-download the files and point LiteParse to them.
+
+<Steps>
+  <Step title="Download traineddata files">
+    Get the `.traineddata` files for your languages from the [tessdata repository](https://github.com/tesseract-ocr/tessdata) and place them in a local directory, for example `/opt/tessdata`.
+  </Step>
+  <Step title="Point LiteParse to the directory">
+    You can set the path via an environment variable or the library config.
+
+    <Tabs>
+      <Tab title="Environment variable">
+        ```bash
+        export TESSDATA_PREFIX=/opt/tessdata
+        lit parse document.pdf --ocr-language eng
+        ```
+      </Tab>
+      <Tab title="Library config">
+        ```typescript
+        import { LiteParse } from '@llamaindex/liteparse';
+
+        const parser = new LiteParse({
+          tessdataPath: '/opt/tessdata',
+          ocrLanguage: 'eng',
+        });
+        ```
+      </Tab>
+    </Tabs>
+
+    `tessdataPath` takes precedence over `TESSDATA_PREFIX` when both are set.
+  </Step>
+</Steps>
+
+## HTTP OCR servers
+
+For use cases that need higher accuracy, GPU acceleration, or alternative OCR models (EasyOCR, PaddleOCR, custom), LiteParse can delegate OCR to any HTTP server that implements its simple OCR API.
+
+The API contract:
+- `POST /ocr` endpoint
+- Accepts `file` and `language` as form parameters
+- Returns `{ results: [{ text, bbox: [x1, y1, x2, y2], confidence }] }`
+
+Example server implementations are provided in the LiteParse repository under `ocr/easyocr/` and `ocr/paddleocr/`.
+
+<Tabs>
+  <Tab title="CLI">
+    ```bash
+    lit parse document.pdf --ocr-server-url http://localhost:8828/ocr
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { LiteParse } from '@llamaindex/liteparse';
+
+    const parser = new LiteParse({
+      ocrServerUrl: 'http://localhost:8828/ocr',
+      ocrLanguage: 'en',
+    });
+    const result = await parser.parse('scanned-document.pdf');
+    ```
+  </Tab>
+  <Tab title="Config file">
+    ```json
+    {
+      "ocrServerUrl": "http://localhost:8828/ocr",
+      "ocrLanguage": "en"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## How OCR is selectively applied
+
+LiteParse does not OCR every page. It applies OCR only where native PDF text extraction produced insufficient results:
+
+- **Text-sparse pages** — pages where the total extracted text is under 100 characters
+- **Pages containing embedded images** — images that may contain text not captured by the PDF parser
+- **Garbled text regions** — areas where the PDF parser detected malformed or unreadable text
+
+OCR results that spatially overlap with existing PDF text are discarded to prevent duplication. This keeps parse times fast on documents that mix native and scanned content.
+
+<Tip>
+If you are parsing a fully scanned PDF with no native text at all, every page will trigger OCR. In this case, tune `numWorkers` and `dpi` to balance speed against accuracy.
+</Tip>
+
+## Disabling OCR
+
+```bash
+# CLI
+lit parse document.pdf --no-ocr
+```
+
+```typescript
+// Library
+const parser = new LiteParse({ ocrEnabled: false });
+```
+
+Disabling OCR is useful when:
+- Your PDFs always contain native (selectable) text
+- Parse speed is more important than completeness
+- You want to avoid Tesseract.js startup overhead in high-throughput pipelines

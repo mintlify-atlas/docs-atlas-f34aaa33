@@ -1,97 +1,78 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "LiteParse"
+description: "A fast, open-source document parser with spatial text extraction, OCR, and multi-format support — runs entirely locally with no cloud dependencies."
 ---
 
-## Setting up
+LiteParse extracts text from PDFs, Office documents, and images with precise spatial layout and bounding boxes. It includes built-in Tesseract.js OCR, supports pluggable HTTP OCR servers, and generates high-quality page screenshots for LLM agents — all without sending data to the cloud.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Install LiteParse and parse your first document in under 2 minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Library Usage" icon="code" href="/guides/library-usage">
+    Use LiteParse as a Node.js library in your application.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="CLI Reference" icon="terminal" href="/cli/parse">
+    Explore all CLI commands: parse, batch-parse, and screenshot.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="brackets-curly" href="/api/liteparse-class">
+    Full TypeScript API — the LiteParse class, config options, and types.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Key features
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Spatial text extraction" icon="layer-group">
+    Preserves text layout with precise bounding boxes using PDF.js — ideal for structured documents.
+  </Card>
+  <Card title="Built-in OCR" icon="eye">
+    Tesseract.js is included out of the box. No setup required for scanned documents.
+  </Card>
+  <Card title="Pluggable OCR servers" icon="plug">
+    Connect EasyOCR, PaddleOCR, or any custom OCR server via a simple HTTP API.
+  </Card>
+  <Card title="Multi-format input" icon="file-import">
+    Automatically converts DOCX, XLSX, PPTX, and images to PDF before parsing.
+  </Card>
+  <Card title="Screenshot generation" icon="camera">
+    Generate high-quality page screenshots for LLM visual agents.
+  </Card>
+  <Card title="Runs locally" icon="server">
+    No cloud dependencies. Everything runs on your machine — Linux, macOS, or Windows.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Get started
 
-## Need inspiration?
+<Steps>
+  <Step title="Install LiteParse">
+    Install globally via npm to use the `lit` CLI, or add as a library dependency.
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    ```bash
+    npm install -g @llamaindex/liteparse
+    ```
+  </Step>
+  <Step title="Parse a document">
+    Run the `lit parse` command on any PDF, Office document, or image.
+
+    ```bash
+    lit parse document.pdf
+    ```
+  </Step>
+  <Step title="Use as a library">
+    Import `LiteParse` in your Node.js project for programmatic access.
+
+    ```typescript
+    import { LiteParse } from '@llamaindex/liteparse';
+
+    const parser = new LiteParse({ ocrEnabled: true });
+    const result = await parser.parse('document.pdf');
+    console.log(result.text);
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Need higher accuracy on complex documents — dense tables, multi-column layouts, or handwritten text? Try [LlamaParse](https://developers.llamaindex.ai/python/cloud/llamaparse/), the cloud-based document parser built for production pipelines.
+</Note>

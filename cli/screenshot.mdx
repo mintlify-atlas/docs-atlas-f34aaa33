@@ -1,0 +1,85 @@
+---
+title: lit screenshot
+description: Generate high-quality PNG or JPEG screenshots of PDF pages for use with LLM agents and visual analysis.
+---
+
+The `lit screenshot` command renders PDF pages to image files. Screenshots capture visual information — tables, diagrams, charts, and complex layouts — that text extraction alone cannot represent. This makes them well-suited for passing to LLM agents as visual context.
+
+## Usage
+
+```bash
+lit screenshot [options] <file>
+```
+
+Screenshots are named `page_1.png`, `page_2.png`, and so on, written to the output directory.
+
+## Options
+
+<ParamField path="-o, --output-dir" type="string" default="./screenshots">
+  Directory where screenshot files are written. Created automatically if it does not exist.
+</ParamField>
+
+<ParamField path="--target-pages" type="string">
+  Render only the specified pages. Accepts individual page numbers and ranges.
+
+  Examples: `"1,3,5"`, `"1-5"`, `"1-3,7,10-12"`
+
+  When omitted, all pages are rendered.
+</ParamField>
+
+<ParamField path="--dpi" type="number" default="150">
+  DPI used when rendering pages. Higher DPI produces sharper images, useful when the document contains fine text or small diagrams, at the cost of larger file sizes and slower rendering.
+</ParamField>
+
+<ParamField path="--format" type="string" default="png">
+  Image format for output files. Accepted values: `png` or `jpg`.
+
+  - `png` — Lossless. Recommended for text-heavy pages.
+  - `jpg` — Smaller file size. Suitable for image-heavy pages where some compression is acceptable.
+</ParamField>
+
+<ParamField path="--password" type="string">
+  Password for encrypted or password-protected documents.
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to a JSON config file. CLI flags override values set in the config file.
+</ParamField>
+
+<ParamField path="-q, --quiet" type="boolean">
+  Suppress all progress output. Errors are still written to stderr.
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+
+```bash Screenshot all pages
+lit screenshot document.pdf -o ./screenshots
+```
+
+```bash Screenshot specific pages
+lit screenshot document.pdf --target-pages "1,3,5" -o ./screenshots
+```
+
+```bash Screenshot a page range
+lit screenshot document.pdf --target-pages "1-10" -o ./screenshots
+```
+
+```bash Custom DPI for higher resolution
+lit screenshot document.pdf --dpi 300 -o ./screenshots
+```
+
+```bash Save as JPEG
+lit screenshot document.pdf --format jpg -o ./screenshots
+```
+
+</CodeGroup>
+
+<Note>
+Screenshots are rendered using PDFium, which produces high-fidelity output independent of the OCR settings used by `lit parse`.
+</Note>
+
+<Tip>
+When building LLM agent workflows, combine `lit parse` (for text) with `lit screenshot` (for visual context) on the same document. Passing both to a multimodal model gives it the full picture — structured text with bounding boxes alongside pixel-accurate page images.
+</Tip>

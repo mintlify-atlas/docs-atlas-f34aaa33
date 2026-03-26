@@ -1,0 +1,128 @@
+---
+title: Multi-format input
+description: Parse Office documents, presentations, spreadsheets, and images by installing LibreOffice and ImageMagick alongside LiteParse.
+---
+
+LiteParse's core engine parses PDFs. For every other format, it automatically converts the input to a temporary PDF first, then runs the same parsing pipeline. This means you get bounding boxes, OCR, and structured JSON output regardless of the original format.
+
+## Supported formats
+
+<CardGroup cols={2}>
+  <Card title="Office documents" icon="file-text">
+    `.doc` `.docx` `.docm` `.odt` `.rtf`
+
+    Requires **LibreOffice**
+  </Card>
+  <Card title="Presentations" icon="presentation">
+    `.ppt` `.pptx` `.pptm` `.odp`
+
+    Requires **LibreOffice**
+  </Card>
+  <Card title="Spreadsheets" icon="table">
+    `.xls` `.xlsx` `.xlsm` `.ods` `.csv` `.tsv`
+
+    Requires **LibreOffice**
+  </Card>
+  <Card title="Images" icon="image">
+    `.jpg` `.jpeg` `.png` `.gif` `.bmp` `.tiff` `.webp` `.svg`
+
+    Requires **ImageMagick**
+  </Card>
+</CardGroup>
+
+## Installing dependencies
+
+### LibreOffice
+
+Required for all Office, presentation, and spreadsheet formats.
+
+<CodeGroup>
+
+```bash macOS
+brew install --cask libreoffice
+```
+
+```bash Ubuntu / Debian
+apt-get install libreoffice
+```
+
+```bash Windows
+choco install libreoffice-fresh
+```
+
+</CodeGroup>
+
+<Warning>
+On Windows, you may need to add the LibreOffice `program` directory (typically `C:\Program Files\LibreOffice\program`) to your `PATH` environment variable and restart your machine before LiteParse can invoke it.
+</Warning>
+
+### ImageMagick
+
+Required for image formats.
+
+<CodeGroup>
+
+```bash macOS
+brew install imagemagick
+```
+
+```bash Ubuntu / Debian
+apt-get install imagemagick
+```
+
+```bash Windows
+choco install imagemagick.app
+```
+
+</CodeGroup>
+
+## How conversion works
+
+When LiteParse receives a non-PDF input, it:
+
+1. Detects the format from the file extension (or magic bytes for buffer input)
+2. Invokes the appropriate external tool as a subprocess — LibreOffice for Office/spreadsheet/presentation formats, ImageMagick for images
+3. Writes the resulting PDF to a temporary directory
+4. Runs the full PDF parsing pipeline on the temporary file
+5. Deletes the temporary PDF after parsing completes
+
+The temporary PDF is never visible to calling code. `ParseResult` returns the same structure regardless of whether the original input was a DOCX or a native PDF.
+
+<Note>
+Conversion timeouts are built in: 2 minutes for LibreOffice and 1 minute for ImageMagick. Very large documents may exceed these limits.
+</Note>
+
+## Buffer input and format auto-detection
+
+You can pass raw bytes instead of a file path. When given a `Buffer` or `Uint8Array`, LiteParse inspects the magic bytes to identify the format:
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+import { readFile } from 'fs/promises';
+
+const parser = new LiteParse();
+
+// From disk
+const docxBytes = await readFile('report.docx');
+const result = await parser.parse(docxBytes);
+
+// From an HTTP response
+const response = await fetch('https://example.com/slides.pptx');
+const buffer = Buffer.from(await response.arrayBuffer());
+const result2 = await parser.parse(buffer);
+```
+
+PDF bytes are handled with zero disk I/O — they go straight to the parser. Non-PDF bytes are written to the temp directory first, converted, then parsed.
+
+Magic byte detection supports: PDF, PNG, JPEG, TIFF (both byte orders), and ZIP-based formats (DOCX, XLSX, PPTX, and other Office Open XML files).
+
+## Controlling the temp directory
+
+By default, LiteParse writes temporary files to the OS temp directory (`os.tmpdir()`). Override this with the `LITEPARSE_TMPDIR` environment variable:
+
+```bash
+export LITEPARSE_TMPDIR=/mnt/scratch/liteparse
+lit parse report.docx
+```
+
+This is useful in containerized environments where the default temp directory is on a read-only or space-constrained filesystem.

@@ -1,0 +1,253 @@
+---
+title: Library usage
+description: Install LiteParse as a Node.js library, parse documents programmatically, and work with structured JSON output and TypeScript types.
+---
+
+LiteParse is available as an npm package for use directly in Node.js and TypeScript projects.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @llamaindex/liteparse
+```
+
+```bash pnpm
+pnpm add @llamaindex/liteparse
+```
+
+```bash yarn
+yarn add @llamaindex/liteparse
+```
+
+</CodeGroup>
+
+## Basic usage
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+
+const parser = new LiteParse();
+const result = await parser.parse('document.pdf');
+
+console.log(result.text);
+```
+
+The `LiteParse` constructor accepts an optional `Partial<LiteParseConfig>`. All fields have defaults — pass only what you need to override:
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+
+const parser = new LiteParse({
+  ocrEnabled: true,
+  ocrLanguage: 'fra',
+  dpi: 300,
+  outputFormat: 'json',
+});
+```
+
+## File path input
+
+Pass an absolute or relative file path as a string:
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+
+const parser = new LiteParse({ outputFormat: 'json' });
+const result = await parser.parse('reports/annual-report.pdf');
+
+// Access full text
+console.log(result.text);
+
+// Access structured JSON
+for (const page of result.json.pages) {
+  console.log(`Page ${page.page}: ${page.textItems.length} text items`);
+}
+```
+
+## Buffer and Uint8Array input
+
+Pass raw bytes directly instead of a file path. This is useful when working with files fetched over HTTP or read from memory:
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+import { readFile } from 'fs/promises';
+
+const parser = new LiteParse();
+
+// From a file read
+const pdfBytes = await readFile('document.pdf');
+const result = await parser.parse(pdfBytes);
+
+// From an HTTP response
+const response = await fetch('https://example.com/document.pdf');
+const buffer = Buffer.from(await response.arrayBuffer());
+const result2 = await parser.parse(buffer);
+```
+
+<Note>
+PDF bytes are passed directly to the parser with zero disk I/O. Non-PDF bytes (images, Office documents) are written to a temp file for format conversion before parsing.
+</Note>
+
+## JSON output format
+
+Set `outputFormat: "json"` to get structured, per-element data. The `result.json` property is populated with a `ParseResultJson` object:
+
+```typescript
+import { LiteParse, ParseResultJson } from '@llamaindex/liteparse';
+
+const parser = new LiteParse({ outputFormat: 'json' });
+const result = await parser.parse('document.pdf');
+
+const json: ParseResultJson = result.json;
+
+for (const page of json.pages) {
+  console.log(`--- Page ${page.page} (${page.width}x${page.height} pts) ---`);
+
+  for (const item of page.textItems) {
+    console.log(`"${item.text}" at (${item.x}, ${item.y})`);
+  }
+}
+```
+
+Each `textItems` entry is a `JsonTextItem`:
+
+```typescript
+interface JsonTextItem {
+  text: string;
+  x: number;       // X coordinate, in PDF points
+  y: number;       // Y coordinate, in PDF points
+  width: number;   // Width, in PDF points
+  height: number;  // Height, in PDF points
+  fontName?: string;
+  fontSize?: number;
+}
+```
+
+## Working with ParseResult and ParsedPage
+
+`parser.parse()` always returns a `ParseResult`:
+
+```typescript
+interface ParseResult {
+  pages: ParsedPage[];      // Per-page data
+  text: string;             // Full document text (all pages concatenated)
+  json?: ParseResultJson;   // Present when outputFormat is "json"
+}
+```
+
+Each `ParsedPage` in `result.pages` includes per-element `TextItem` data with full coordinate and font metadata:
+
+```typescript
+import { LiteParse, ParsedPage, TextItem } from '@llamaindex/liteparse';
+
+const parser = new LiteParse();
+const result = await parser.parse('document.pdf');
+
+result.pages.forEach((page: ParsedPage) => {
+  console.log(`Page ${page.pageNum}: ${page.width}x${page.height} pts`);
+
+  page.textItems.forEach((item: TextItem) => {
+    // Coordinates in PDF points; origin is top-left
+    console.log(`  "${item.str}" font=${item.fontName} size=${item.fontSize}`);
+  });
+});
+```
+
+## Searching text items
+
+The `searchItems` utility searches an array of `JsonTextItem` entries for all occurrences of a phrase. Matches that span multiple adjacent items are merged into a single result with a combined bounding box.
+
+`searchItems` operates on `result.json.pages[n].textItems` (which are `JsonTextItem[]`):
+
+```typescript
+import { LiteParse, searchItems } from '@llamaindex/liteparse';
+
+const parser = new LiteParse({ outputFormat: 'json' });
+const result = await parser.parse('report.pdf');
+
+for (const page of result.json.pages) {
+  // Case-insensitive search (default)
+  const matches = searchItems(page.textItems, { phrase: 'total revenue' });
+
+  for (const match of matches) {
+    console.log(`Found "${match.text}" at (${match.x}, ${match.y})`);
+  }
+}
+```
+
+Case-sensitive search:
+
+```typescript
+const exactMatches = searchItems(page.textItems, {
+  phrase: 'Total Revenue',
+  caseSensitive: true,
+});
+```
+
+`searchItems` accepts a `SearchItemsOptions` object and returns `JsonTextItem[]`:
+
+```typescript
+import type { SearchItemsOptions, JsonTextItem } from '@llamaindex/liteparse';
+
+// Options
+interface SearchItemsOptions {
+  phrase: string;           // Text to find (can span multiple adjacent items)
+  caseSensitive?: boolean;  // Default: false
+}
+
+// Return: each match is a single merged JsonTextItem
+// - match.text is set to the search phrase
+// - match.x, match.y, match.width, match.height enclose all matched items
+```
+
+## TypeScript types
+
+All types are exported from the main package entry point:
+
+```typescript
+import type {
+  LiteParseConfig,
+  LiteParseInput,
+  OutputFormat,
+  ParseResult,
+  ParseResultJson,
+  ParsedPage,
+  TextItem,
+  JsonTextItem,
+  SearchItemsOptions,
+  ScreenshotResult,
+  MarkupData,
+  BoundingBox,
+} from '@llamaindex/liteparse';
+```
+
+## Error handling
+
+`parser.parse()` throws an `Error` if the file cannot be found, the format conversion fails, or the PDF cannot be opened. Wrap calls in `try/catch`:
+
+```typescript
+import { LiteParse } from '@llamaindex/liteparse';
+
+const parser = new LiteParse();
+
+try {
+  const result = await parser.parse('document.pdf');
+  console.log(result.text);
+} catch (error) {
+  // Possible causes:
+  // - File not found
+  // - Unsupported format (missing LibreOffice/ImageMagick)
+  // - Conversion process failed
+  // - Incorrect or missing password for encrypted PDF
+  console.error('Parse failed:', error.message);
+}
+```
+
+For password-protected documents:
+
+```typescript
+const parser = new LiteParse({ password: 'mysecret' });
+const result = await parser.parse('protected.pdf');
+```

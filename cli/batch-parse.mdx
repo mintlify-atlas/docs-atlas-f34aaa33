@@ -1,0 +1,118 @@
+---
+title: lit batch-parse
+description: Parse an entire directory of documents in batch mode, reusing the PDF engine across files for efficiency.
+---
+
+The `lit batch-parse` command processes all supported documents in an input directory and writes the parsed output to a corresponding output directory. It reuses a single parser instance across all files, which avoids repeated engine initialization overhead and makes large batch jobs significantly faster.
+
+## Usage
+
+```bash
+lit batch-parse [options] <input-dir> <output-dir>
+```
+
+The output directory is created automatically if it does not exist. Output files mirror the input directory structure, with file extensions replaced by `.txt` (text format) or `.json` (JSON format).
+
+## Options
+
+<ParamField path="--format" type="string" default="text">
+  Output format for all parsed files. Accepted values: `json` or `text`.
+</ParamField>
+
+<ParamField path="--ocr-server-url" type="string">
+  URL of an HTTP OCR server. When provided, LiteParse uses this server instead of the built-in Tesseract.js engine.
+</ParamField>
+
+<ParamField path="--no-ocr" type="boolean">
+  Disable OCR for all files. Only native PDF text is extracted.
+</ParamField>
+
+<ParamField path="--ocr-language" type="string" default="en">
+  Language code(s) passed to the OCR engine. Use Tesseract language codes (e.g., `eng`, `fra`).
+</ParamField>
+
+<ParamField path="--num-workers" type="number" default="CPU cores - 1">
+  Number of pages to OCR in parallel. Defaults to the number of logical CPU cores minus one (minimum 1).
+</ParamField>
+
+<ParamField path="--max-pages" type="number" default="10000">
+  Maximum pages to parse per file.
+</ParamField>
+
+<ParamField path="--dpi" type="number" default="150">
+  DPI used when rendering pages to images for OCR.
+</ParamField>
+
+<ParamField path="--no-precise-bbox" type="boolean">
+  Disable precise bounding box calculation. Faster but less accurate spatial data.
+</ParamField>
+
+<ParamField path="--recursive" type="boolean">
+  Recursively search subdirectories of the input directory for supported files.
+</ParamField>
+
+<ParamField path="--extension" type="string">
+  Only process files matching this extension (e.g., `.pdf`). By default, all supported formats are processed.
+
+  Supported formats include: `.pdf`, `.doc`, `.docx`, `.ppt`, `.pptx`, `.xls`, `.xlsx`, `.csv`, `.tsv`, `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.webp`, `.svg`, `.rtf`, and more.
+</ParamField>
+
+<ParamField path="--password" type="string">
+  Password applied to all files in the batch. Only useful when all files share the same password.
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to a JSON config file. CLI flags override values set in the config file.
+</ParamField>
+
+<ParamField path="-q, --quiet" type="boolean">
+  Suppress all progress output. Errors are still written to stderr.
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+
+```bash Basic batch parse
+lit batch-parse ./documents ./output
+```
+
+```bash Batch parse to JSON
+lit batch-parse ./documents ./output --format json
+```
+
+```bash Recursive with extension filter
+lit batch-parse ./documents ./output --recursive --extension .pdf
+```
+
+```bash With a custom OCR server
+lit batch-parse ./documents ./output --ocr-server-url http://localhost:8828/ocr
+```
+
+</CodeGroup>
+
+## Output structure
+
+Output files mirror the input directory layout. For example:
+
+```
+input/
+  report.pdf
+  slides/
+    q1.pptx
+
+output/
+  report.txt
+  slides/
+    q1.txt
+```
+
+When `--format json` is used, all extensions become `.json`.
+
+<Note>
+If any file fails to parse, `lit batch-parse` logs the error and continues processing remaining files. It exits with a non-zero status code when one or more files fail.
+</Note>
+
+<Tip>
+Use `--recursive` together with `--extension .pdf` to process a deeply nested archive of PDFs without touching unrelated file types.
+</Tip>

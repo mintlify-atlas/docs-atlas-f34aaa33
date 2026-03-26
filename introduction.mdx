@@ -1,0 +1,102 @@
+---
+title: Introduction
+description: LiteParse is a fast, open-source document parser with spatial text extraction, OCR, and bounding boxes — no cloud required.
+---
+
+LiteParse is a standalone, open-source document parsing library built for speed and simplicity. It extracts text from PDFs and other document formats with precise spatial positioning — entirely on your local machine, with no cloud dependencies.
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Spatial text extraction" icon="crosshairs">
+    Extracts text with precise bounding boxes and layout reconstruction using an anchor-based grid projection system.
+  </Card>
+  <Card title="Flexible OCR" icon="eye">
+    Includes built-in Tesseract.js (zero setup) and supports pluggable HTTP OCR servers such as EasyOCR and PaddleOCR.
+  </Card>
+  <Card title="Multi-format input" icon="file">
+    Parses PDFs natively and auto-converts DOCX, XLSX, PPTX, and images to PDF via LibreOffice and ImageMagick.
+  </Card>
+  <Card title="Screenshot generation" icon="camera">
+    Renders high-quality page screenshots using PDFium — useful for feeding visual context to LLM agents.
+  </Card>
+  <Card title="Local-only" icon="lock">
+    No API keys, no network calls, no data leaving your machine. Everything runs in-process.
+  </Card>
+  <Card title="CLI and library" icon="terminal">
+    Ships as both a `lit` CLI command and an `@llamaindex/liteparse` npm package for use in TypeScript/Node.js projects.
+  </Card>
+</CardGroup>
+
+## LiteParse vs LlamaParse
+
+LiteParse is the right choice when you need fast, local parsing without cloud dependencies. For more complex documents, [LlamaParse](https://developers.llamaindex.ai/python/cloud/llamaparse/) provides higher accuracy.
+
+| | LiteParse | LlamaParse |
+|---|---|---|
+| Runs locally | Yes | No (cloud API) |
+| API key required | No | Yes |
+| Simple PDFs | Excellent | Excellent |
+| Dense tables | Good | Best |
+| Multi-column layouts | Good | Best |
+| Scanned / handwritten docs | Basic (Tesseract) | Best |
+| Bounding boxes | Yes | Yes |
+| Screenshot generation | Yes | Yes |
+
+<Note>
+  If you hit the limits of local parsing — dense tables, complex multi-column layouts, charts, or handwritten text — [LlamaParse](https://cloud.llamaindex.ai) handles those cases with production-grade accuracy.
+</Note>
+
+## How it works
+
+LiteParse processes documents through a sequential pipeline:
+
+1. **Format conversion** — Non-PDF inputs (DOCX, XLSX, images, etc.) are converted to PDF via LibreOffice or ImageMagick.
+2. **PDF loading** — PDF.js extracts raw text items, embedded images, and page metadata.
+3. **Selective OCR** — OCR runs only on pages with fewer than 100 characters of native text, or on pages containing embedded images. PDF bytes are passed directly to the engine with zero disk I/O.
+4. **Grid projection** — An anchor-based spatial reconstruction algorithm rebuilds the visual layout, handling multi-column text, rotated text (90°, 180°, 270°), and merged OCR results.
+5. **Bounding box calculation** — Precise per-line bounding boxes are computed from the reconstructed layout.
+6. **Output formatting** — Results are serialized as plain text (with layout preserved) or structured JSON.
+
+## Requirements
+
+- **Node.js >= 18**
+- Optional: **LibreOffice** for parsing Office documents (DOCX, XLSX, PPTX)
+- Optional: **ImageMagick** for parsing image files (JPG, PNG, TIFF, etc.)
+
+## Installation
+
+### CLI
+
+Install the `lit` command globally:
+
+<CodeGroup>
+```bash npm
+npm install -g @llamaindex/liteparse
+```
+```bash brew
+brew tap run-llama/liteparse
+brew install llamaindex-liteparse
+```
+</CodeGroup>
+
+### Library
+
+Add LiteParse as a dependency in your project:
+
+<CodeGroup>
+```bash npm
+npm install @llamaindex/liteparse
+```
+```bash pnpm
+pnpm add @llamaindex/liteparse
+```
+</CodeGroup>
+
+## Next steps
+
+<CardGroup cols={1}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Parse your first document in under a minute — with the CLI or as a library.
+  </Card>
+</CardGroup>

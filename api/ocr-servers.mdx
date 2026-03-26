@@ -1,0 +1,242 @@
+---
+title: OCR Servers
+description: How to run EasyOCR and PaddleOCR as pluggable OCR backends for LiteParse, and how to implement your own.
+---
+
+LiteParse ships with Tesseract.js built in — no setup required. For higher accuracy on Asian languages or faster throughput on large documents, you can swap the OCR engine by running an external HTTP server and pointing LiteParse at it via `ocrServerUrl`.
+
+## Comparison
+
+| Feature | Tesseract.js (built-in) | EasyOCR | PaddleOCR |
+|---------|-------------------------|---------|----------|
+| Setup | None (zero config) | `uv` | `uv` |
+| Speed | Moderate | Moderate | Fast (2–3×) |
+| Accuracy — Latin | Good | Good | Good |
+| Accuracy — CJK | Fair | Good | Excellent |
+| Languages | 100+ | 80+ | 80+ |
+| Memory | In-process | Separate process | Separate process |
+
+**When to use each:**
+- **Quick start / default**: Use the built-in Tesseract — no server to manage.
+- **Asian languages (Chinese, Japanese, Korean)**: Use PaddleOCR — best CJK support.
+- **General-purpose alternative**: Use EasyOCR — good balance of accuracy and language coverage.
+
+---
+
+## EasyOCR server
+
+A FastAPI server wrapping [EasyOCR](https://github.com/JaidedAI/EasyOCR). Default port: **8828**.
+
+### Start the server
+
+```bash
+cd ocr/easyocr
+uv run server.py
+```
+
+`uv` installs all Python dependencies automatically on first run. The server binds to `0.0.0.0:8828`.
+
+<Note>
+  EasyOCR lazy-loads its models: the first request for a given language will be slower while the model downloads. Subsequent requests use the cached model.
+</Note>
+
+### Supported languages
+
+EasyOCR supports 80+ languages. Common codes accepted by the server:
+
+`en`, `fr`, `de`, `es`, `zh`, `ja`, `ko`, `ar`, and more. Full list at [jaided.ai/easyocr](https://www.jaided.ai/easyocr/).
+
+### Connect via CLI
+
+```bash
+# Use EasyOCR for all OCR
+lit parse document.pdf --ocr-server-url http://localhost:8828/ocr
+
+# Specify a language
+lit parse document.pdf --ocr-server-url http://localhost:8828/ocr --ocr-language zh
+```
+
+### Connect via library
+
+```typescript
+import { LiteParse } from "@llamaindex/liteparse";
+
+const parser = new LiteParse({
+  ocrServerUrl: "http://localhost:8828/ocr",
+  ocrLanguage: "en",
+});
+
+const result = await parser.parse("document.pdf");
+console.log(result.text);
+```
+
+### Run tests
+
+```bash
+cd ocr/easyocr
+uv run pytest test_server.py
+```
+
+### Docker
+
+A `Dockerfile` is included in `ocr/easyocr/` for containerised deployments.
+
+```bash
+docker build -t liteparse-easyocr ./ocr/easyocr
+docker run -p 8828:8828 liteparse-easyocr
+```
+
+---
+
+## PaddleOCR server
+
+A FastAPI server wrapping [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR). Default port: **8829**.
+
+### Start the server
+
+```bash
+cd ocr/paddleocr
+uv run server.py
+```
+
+The server binds to `0.0.0.0:8829`.
+
+<Note>
+  The first request may be slow as PaddleOCR downloads its models. Models are cached after the first use.
+</Note>
+
+### Language mapping
+
+The PaddleOCR server accepts ISO 639-1 codes and maps them internally to PaddleOCR's format:
+
+| Input code | PaddleOCR lang | Notes |
+|------------|----------------|-------|
+| `en` | `en` | |
+| `zh` / `zh-cn` / `zh-hans` | `ch` | Simplified Chinese |
+| `zh-tw` / `zh-hant` | `chinese_cht` | Traditional Chinese |
+| `ja` | `japan` | |
+| `ko` | `korean` | |
+| `fr` | `fr` | |
+| `de` | `de` | |
+| `es` | `es` | |
+| `pt` | `pt` | |
+| `ru` | `ru` | |
+| `ar` | `ar` | |
+| `hi` | `hi` | |
+
+### Connect via CLI
+
+```bash
+# Use PaddleOCR for all OCR
+lit parse document.pdf --ocr-server-url http://localhost:8829/ocr
+
+# Parse a Chinese document
+lit parse document.pdf --ocr-server-url http://localhost:8829/ocr --ocr-language zh
+```
+
+### Connect via library
+
+```typescript
+import { LiteParse } from "@llamaindex/liteparse";
+
+const parser = new LiteParse({
+  ocrServerUrl: "http://localhost:8829/ocr",
+  ocrLanguage: "zh",
+});
+
+const result = await parser.parse("chinese-document.pdf");
+console.log(result.text);
+```
+
+### Run tests
+
+```bash
+cd ocr/paddleocr
+uv run pytest test_server.py
+```
+
+### Docker
+
+A `Dockerfile` is included in `ocr/paddleocr/` for containerised deployments.
+
+```bash
+docker build -t liteparse-paddleocr ./ocr/paddleocr
+docker run -p 8829:8829 liteparse-paddleocr
+```
+
+---
+
+## Implementing a custom OCR server
+
+Any HTTP server that conforms to the [OCR API Specification](/api/ocr-api-spec) works with LiteParse. The implementation language and framework are up to you.
+
+### Minimal skeleton (Python / FastAPI)
+
+```python
+from fastapi import FastAPI, UploadFile, File, Form
+from pydantic import BaseModel
+from typing import Any
+import uvicorn
+
+app = FastAPI()
+
+class OcrResponse(BaseModel):
+    results: list[Any]
+
+@app.post("/ocr")
+async def ocr_endpoint(
+    file: UploadFile = File(...),
+    language: str = Form(default="en")
+) -> OcrResponse:
+    image_data = await file.read()
+    # TODO: run your OCR engine on image_data
+    results = run_my_ocr(image_data, language)
+    # Return results in the standard format
+    return OcrResponse(results=[
+        {
+            "text": r.text,
+            "bbox": [r.x1, r.y1, r.x2, r.y2],  # pixel coords, top-left origin
+            "confidence": r.confidence,          # 0.0–1.0
+        }
+        for r in results
+    ])
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8830)
+```
+
+### Key requirements
+
+- Accept `POST /ocr` with `multipart/form-data` containing `file` (binary) and `language` (string).
+- Return JSON with a `results` array; each entry must have `text`, `bbox`, and `confidence`.
+- Bounding boxes must be axis-aligned `[x1, y1, x2, y2]` in pixel coordinates with `(0, 0)` at the top-left.
+- Normalise confidence to `0.0`–`1.0`. If your engine does not produce confidence scores, return `1.0`.
+- Return `400` for bad requests and `500` for processing errors, each with an `{ "error": "..." }` body.
+
+See the full [OCR API Specification](/api/ocr-api-spec) for the complete contract including compliance checklist.
+
+---
+
+## Performance recommendations
+
+<Tip>
+  **Cache models in memory.** Load your OCR model once at startup and reuse it across requests. Reloading per-request is the single biggest performance mistake.
+</Tip>
+
+- **Respond within 10 seconds** per image. LiteParse has no built-in timeout but users will notice slow servers.
+- **Support concurrent requests.** LiteParse sends up to `numWorkers` pages in parallel. Your server should handle multiple simultaneous requests without serialising them.
+- **Use GPU acceleration** where your infrastructure supports it. The reference server implementations run on CPU by default; modify `server.py` to enable GPU if your setup supports it.
+- **Keep `dpi` in mind.** Higher `dpi` values (e.g. 300) produce larger images, increasing both OCR accuracy and server processing time. 150 DPI is the default and works well for most documents.
+- **Tune `numWorkers`.** The default is `CPU cores - 1`. Increase it to saturate a fast GPU OCR server, or decrease it to reduce memory pressure.
+
+---
+
+## Related
+
+- [OCR API Specification](/api/ocr-api-spec) — Full HTTP contract for custom OCR servers.
+- [LiteParseConfig](/api/types#liteparseconfig) — `ocrServerUrl`, `ocrLanguage`, `numWorkers`, and `dpi` configuration fields.
+- [LiteParse class](/api/liteparse-class) — `parse()` and `screenshot()` methods that invoke the OCR pipeline.

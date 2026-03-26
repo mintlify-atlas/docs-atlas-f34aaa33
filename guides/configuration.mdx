@@ -1,0 +1,155 @@
+---
+title: Configuration
+description: Full reference for all LiteParseConfig options, the liteparse.config.json file, and supported environment variables.
+---
+
+LiteParse accepts configuration through three sources, merged in this order (later sources win):
+
+1. Built-in defaults
+2. A JSON config file (`--config liteparse.config.json`)
+3. CLI flags or constructor arguments
+
+All fields are optional — pass only what you need to override.
+
+## Config file
+
+Create a `liteparse.config.json` file and pass it with `--config`:
+
+```json
+{
+  "ocrLanguage": "en",
+  "ocrEnabled": true,
+  "maxPages": 1000,
+  "dpi": 150,
+  "outputFormat": "json",
+  "preciseBoundingBox": true,
+  "preserveVerySmallText": false,
+  "password": "optional_password"
+}
+```
+
+```bash
+lit parse document.pdf --config liteparse.config.json
+```
+
+For an HTTP OCR server setup:
+
+```json
+{
+  "ocrServerUrl": "http://localhost:8828/ocr",
+  "ocrLanguage": "en",
+  "outputFormat": "json"
+}
+```
+
+## All config options
+
+### OCR options
+
+<ParamField path="ocrEnabled" type="boolean" default="true">
+  Whether to run OCR on pages with little or no native text. When enabled, LiteParse selectively OCRs only images and text-sparse regions — not every page.
+</ParamField>
+
+<ParamField path="ocrLanguage" type="string | string[]" default='"en"'>
+  OCR language code(s). The accepted format depends on the active engine:
+
+  - **Tesseract.js** (default): ISO 639-3 codes, e.g. `"eng"`, `"fra"`, `"deu"`
+  - **HTTP OCR server**: ISO 639-1 codes, e.g. `"en"`, `"fr"`, `"de"`
+
+  Pass an array to enable multiple languages: `["eng", "fra"]`.
+</ParamField>
+
+<ParamField path="ocrServerUrl" type="string">
+  URL of an HTTP OCR server implementing the LiteParse OCR API. When set, the built-in Tesseract.js engine is bypassed entirely.
+
+  Example: `"http://localhost:8828/ocr"`
+</ParamField>
+
+<ParamField path="tessdataPath" type="string">
+  Path to a directory containing Tesseract `.traineddata` language files. Used as both the data source and cache directory for Tesseract.js.
+
+  Falls back to the `TESSDATA_PREFIX` environment variable, then to auto-downloading from cdn.jsdelivr.net.
+
+  Example: `"/opt/tessdata"`
+</ParamField>
+
+<ParamField path="numWorkers" type="number" default="4">
+  Number of pages to OCR in parallel. Higher values speed up OCR on multi-core machines at the cost of increased memory usage. The library default is `4`. When using the CLI, this defaults to CPU cores - 1 (minimum 1).
+</ParamField>
+
+### Page selection
+
+<ParamField path="maxPages" type="number" default="1000">
+  Maximum number of pages to parse from the document. Pages beyond this limit are silently ignored.
+</ParamField>
+
+<ParamField path="targetPages" type="string">
+  Specific pages to parse, as a comma-separated string of numbers and ranges.
+
+  Example: `"1-5,10,15-20"` — parses pages 1 through 5, page 10, and pages 15 through 20.
+
+  When omitted, all pages up to `maxPages` are parsed.
+</ParamField>
+
+### Rendering
+
+<ParamField path="dpi" type="number" default="150">
+  DPI for rendering pages to images. Used for both OCR and screenshot generation.
+
+  Higher DPI improves OCR accuracy and screenshot sharpness but increases processing time and memory usage. Common values:
+
+  - `150` — default, suitable for most documents
+  - `200` – `250` — improved accuracy for small fonts
+  - `300` — high quality, noticeably slower
+</ParamField>
+
+### Output
+
+<ParamField path="outputFormat" type='"json" | "text"' default='"json"'>
+  Output format for parsed results.
+
+  - `"json"` — structured output with per-page `textItems`, bounding boxes, and metadata; populates `result.json`
+  - `"text"` — plain text with spatial layout preserved; available in `result.text`
+</ParamField>
+
+<ParamField path="preciseBoundingBox" type="boolean" default="true">
+  Calculate precise bounding boxes for each text line.
+
+  <Warning>
+    This option is deprecated and controls the legacy `boundingBoxes` output field. It will be removed in v2.0. Text item coordinates (`x`, `y`, `width`, `height`) on each `TextItem` are always present and are the recommended alternative.
+  </Warning>
+</ParamField>
+
+### Text handling
+
+<ParamField path="preserveVerySmallText" type="boolean" default="false">
+  Preserve text that would normally be filtered out due to very small font size. Enable this if you need to extract footnotes, legal disclaimers, or other fine print.
+</ParamField>
+
+<ParamField path="preserveLayoutAlignmentAcrossPages" type="boolean" default="false">
+  Maintain consistent text alignment across page boundaries. When enabled, the grid projection carries alignment state from one page to the next.
+</ParamField>
+
+### Document security
+
+<ParamField path="password" type="string">
+  Password for opening encrypted or protected documents. Applied to both PDFs and Office documents.
+
+  ```bash
+  lit parse protected.pdf --password mysecret
+  ```
+</ParamField>
+
+## Environment variables
+
+| Variable | Description |
+|---|---|
+| `TESSDATA_PREFIX` | Path to a directory containing Tesseract `.traineddata` files. Used when `tessdataPath` is not set in config. Required for offline/air-gapped environments. |
+| `LITEPARSE_TMPDIR` | Override the temp directory used for format conversion and intermediate files. Defaults to `os.tmpdir()`. Useful in containerized or read-only filesystem environments. |
+
+```bash
+export TESSDATA_PREFIX=/opt/tessdata
+export LITEPARSE_TMPDIR=/mnt/scratch/liteparse
+
+lit parse document.pdf
+```

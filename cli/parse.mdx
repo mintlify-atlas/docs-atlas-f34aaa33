@@ -1,0 +1,155 @@
+---
+title: lit parse
+description: Parse a document file (PDF, DOCX, XLSX, PPTX, images, and more) and extract text with optional OCR.
+---
+
+The `lit parse` command extracts text from a document file. It supports PDFs natively and automatically converts Office documents and images to PDF before parsing. Output can be plain text or structured JSON with bounding boxes.
+
+## Usage
+
+```bash
+lit parse [options] <file>
+```
+
+Pass `-` as `<file>` to read from stdin.
+
+## Options
+
+<ParamField path="-o, --output" type="string">
+  Write output to a file instead of stdout.
+</ParamField>
+
+<ParamField path="--format" type="string" default="text">
+  Output format. Accepted values: `json` or `text`.
+
+  - `text` — Plain text extracted from the document.
+  - `json` — Structured JSON including bounding boxes and page metadata.
+</ParamField>
+
+<ParamField path="--ocr-server-url" type="string">
+  URL of an HTTP OCR server (e.g., `http://localhost:8828/ocr`). When provided, LiteParse uses this server instead of the built-in Tesseract.js engine. The server must implement the [LiteParse OCR API spec](https://github.com/run-llama/liteparse/blob/main/OCR_API_SPEC.md).
+</ParamField>
+
+<ParamField path="--no-ocr" type="boolean">
+  Disable OCR entirely. Only native PDF text is extracted. Useful for speed when you know the document is text-native.
+</ParamField>
+
+<ParamField path="--ocr-language" type="string" default="en">
+  Language code(s) passed to the OCR engine. Use Tesseract language codes (e.g., `eng`, `fra`, `deu`). Multiple languages can be specified as a comma-separated list.
+</ParamField>
+
+<ParamField path="--num-workers" type="number" default="CPU cores - 1">
+  Number of pages to OCR in parallel. Defaults to the number of logical CPU cores minus one (minimum 1).
+</ParamField>
+
+<ParamField path="--max-pages" type="number" default="10000">
+  Stop parsing after this many pages. Useful for previewing large documents.
+</ParamField>
+
+<ParamField path="--target-pages" type="string">
+  Only parse the specified pages. Accepts comma-separated page numbers and ranges.
+
+  Examples: `"1-5"`, `"1,3,5"`, `"1-5,10,15-20"`
+</ParamField>
+
+<ParamField path="--dpi" type="number" default="150">
+  DPI used when rendering PDF pages to images for OCR. Higher values improve OCR accuracy at the cost of speed and memory.
+</ParamField>
+
+<ParamField path="--no-precise-bbox" type="boolean">
+  Disable precise bounding box calculation. Parsing is faster but spatial position data is less accurate.
+</ParamField>
+
+<ParamField path="--preserve-small-text" type="boolean">
+  Preserve very small text that would otherwise be filtered out during post-processing.
+</ParamField>
+
+<ParamField path="--password" type="string">
+  Password for encrypted or password-protected documents.
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to a JSON config file. CLI flags override values set in the config file. See [Configuration](#configuration) below.
+</ParamField>
+
+<ParamField path="-q, --quiet" type="boolean">
+  Suppress all progress output. Errors are still written to stderr. Useful when piping output to another process.
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+
+```bash Basic parsing
+lit parse document.pdf
+```
+
+```bash Parse to JSON with output file
+lit parse document.pdf --format json -o output.json
+```
+
+```bash Parse specific pages
+lit parse document.pdf --target-pages "1-5,10,15-20"
+```
+
+```bash Parse without OCR
+lit parse document.pdf --no-ocr
+```
+
+```bash Parse remote PDF via curl pipe
+curl -sL https://example.com/report.pdf | lit parse -
+```
+
+```bash Parse with a custom OCR server
+lit parse document.pdf --ocr-server-url http://localhost:8828/ocr
+```
+
+```bash Parse using a config file
+lit parse document.pdf --config liteparse.config.json
+```
+
+```bash Parse a password-protected document
+lit parse document.pdf --password mysecretpassword
+```
+
+</CodeGroup>
+
+## Configuration
+
+You can store default options in a JSON file and pass it with `--config`. CLI flags take precedence over config file values.
+
+```json liteparse.config.json
+{
+  "ocrLanguage": "en",
+  "ocrEnabled": true,
+  "maxPages": 1000,
+  "dpi": 150,
+  "outputFormat": "json",
+  "preciseBoundingBox": true,
+  "preserveVerySmallText": false,
+  "password": "optional_password"
+}
+```
+
+For an HTTP OCR server, add `ocrServerUrl`:
+
+```json liteparse.config.json
+{
+  "ocrServerUrl": "http://localhost:8828/ocr",
+  "ocrLanguage": "en",
+  "outputFormat": "json"
+}
+```
+
+<Note>
+By default, Tesseract.js downloads language data on first use. In offline or air-gapped environments, set the `TESSDATA_PREFIX` environment variable to a directory containing pre-downloaded `.traineddata` files.
+
+```bash
+export TESSDATA_PREFIX=/path/to/tessdata
+lit parse document.pdf --ocr-language eng
+```
+</Note>
+
+<Tip>
+For complex documents — dense tables, multi-column layouts, scanned PDFs, or handwritten text — consider pairing LiteParse with an HTTP OCR server such as EasyOCR or PaddleOCR for higher accuracy.
+</Tip>

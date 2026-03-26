@@ -1,0 +1,86 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "LiteParse",
+  "projectDescription": "A fast, open-source document parser with spatial text extraction, OCR, and multi-format support that runs entirely locally.",
+  "theme": "luma",
+  "primaryColor": "#f4f4f4",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/ocr-setup",
+              "guides/multi-format-input",
+              "guides/configuration",
+              "guides/screenshots",
+              "guides/library-usage"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "cli/parse",
+              "cli/batch-parse",
+              "cli/screenshot"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Library API",
+            "pages": [
+              "api/liteparse-class",
+              "api/types"
+            ]
+          },
+          {
+            "group": "OCR Integration",
+            "pages": [
+              "api/ocr-api-spec",
+              "api/ocr-servers"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Spatial text extraction with precise bounding boxes using PDF.js",
+    "Built-in Tesseract.js OCR with zero setup required",
+    "Pluggable HTTP OCR server support (EasyOCR, PaddleOCR, custom)",
+    "Multi-format document input via LibreOffice and ImageMagick conversion",
+    "High-quality page screenshot generation for LLM agents",
+    "JSON and plain-text output formats",
+    "Standalone binary with no cloud dependencies",
+    "Cross-platform: Linux, macOS (Intel/ARM), Windows"
+  ],
+  "publicApiSurface": [
+    "LiteParse (class) — main parser with parse() and screenshot() methods",
+    "LiteParseConfig — configuration interface with OCR, DPI, output format options",
+    "ParseResult — result type with pages, text, and optional JSON output",
+    "ParsedPage — per-page data with textItems, bounding boxes, and dimensions",
+    "TextItem — individual extracted text element with position and font metadata",
+    "ScreenshotResult — screenshot result with imageBuffer and dimensions",
+    "searchItems(items, options) — utility to search text items by phrase",
+    "BoundingBox — deprecated bounding box type (x1, y1, x2, y2)",
+    "lit parse — CLI command for parsing documents",
+    "lit batch-parse — CLI command for batch directory parsing",
+    "lit screenshot — CLI command for generating page screenshots",
+    "POST /ocr — OCR server HTTP endpoint specification"
+  ]
+}
